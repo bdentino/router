@@ -1,0 +1,102 @@
+# Generated automatically by consul-template
+#
+# TODO: Update template to take advantage of whitespace-trimming
+# one new Go is released (see https://github.com/golang/go/issues/9969)
+#
+
+global
+    log /dev/log local0
+    debug
+    stats timeout 30s
+{{ with $maxconn:=key "service/haproxy/maxconn" }}
+    maxconn {{ $maxconn }}
+{{ else }}
+    maxconn 4096
+{{ end }}
+
+defaults
+    log global
+    option httplog
+    option log-separate-errors
+    mode http
+{{ range ls "service/haproxy/timeouts" }}
+    timeout {{ .Key }} {{ .Value }}
+{{ else }}
+    timeout connect 5000
+    timeout client  50000
+    timeout server  50000
+{{ end }}
+
+frontend www
+    bind *:80
+
+{{ range services }}
+  {{ if in .Tags "http" }}
+    acl local_{{ .Name }} hdr(host) -i {{ .Name }}.router.local
+    use_backend {{ .Name }} if local_{{ .Name }}
+
+    {{ if (env "HAPROXY_DOMAIN") }}
+    acl external_{{ .Name }} hdr(host) -i {{ .Name }}.{{ env "HAPROXY_DOMAIN" }}
+    use_backend {{ .Name }} if external_{{ .Name }}
+    {{ end }}
+
+    {{ range service .Name }}
+    {{ if in .Tags "http" }}
+    acl local_{{ .Node }}_{{ .Name }} hdr(host) -i {{ .Node }}.{{ .Name }}.router.local
+    use_backend {{ .Node }}_{{ .Name }} if local_{{ .Node }}_{{ .Name }}
+
+      {{ if (env "HAPROXY_DOMAIN") }}
+    acl external_{{ .Node }}_{{ .Name }} hdr(host) -i {{ .Node }}.{{ .Name }}.{{ env "HAPROXY_DOMAIN" }}
+    use_backend {{ .Node }}_{{ .Name }} if external_{{ .Node }}_{{ .Name }}
+      {{ end }}
+    {{ end }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range services }}
+{{ if in .Tags "http" }}
+backend {{ .Name }}
+{{ range service .Name }}
+{{ if in .Tags "http" }}
+   server {{ .Node }} {{ .Address }}:{{ .Port }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+
+{{ range nodes }}
+{{ $node := .Node }}
+{{ range services }}
+{{ if in .Tags "http" }}
+backend {{ $node }}_{{ .Name }}
+{{ range service .Name }}
+{{ if in .Tags "http" }}
+{{ if eq $node .Node }}
+   server {{ .Node }} {{ .Address }}:{{ .Port }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+
+listen stats 0.0.0.0:9090
+    mode http
+    balance
+    timeout client 5000
+    timeout connect 4000
+    timeout server 30000
+
+    #This is the virtual URL to access the stats page
+    stats uri /
+
+    #Authentication realm. This can be set to anything. Escape space characters with a backslash.
+    stats realm HAProxy\ Statistics
+
+    #The user/pass you want to use. Change this password!
+    stats auth admin:pass
+
+    #This allows you to take down and bring up back end servers.
+    #This will produce an error on older versions of HAProxy.
+    stats admin if TRUE

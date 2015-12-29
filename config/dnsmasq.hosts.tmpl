@@ -1,0 +1,13 @@
+##
+# Generated automatically by consul-template
+#
+# Directs all *.router.local requests to healthy
+# haproxy instances visible to consul
+##
+{{ $preferred := or (env "HOSTNAME") "" }}
+
+{{ range service "router" }}{{ if eq .Node $preferred }}{{ .Address }} {{ range services }} {{ if in .Tags "http" }} {{ .Name }} {{ end}}{{ end}}{{ end }}{{ end }}
+
+{{ range service "router" }}{{ if ne .Node $preferred }}
+{{ .Address }} {{ range services }} {{ if in .Tags "http" }} {{ .Name }} {{ end }}{{ end }}
+{{ end }}{{ end }}

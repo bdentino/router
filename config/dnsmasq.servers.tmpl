@@ -1,0 +1,23 @@
+##
+# Generated automatically by consul-template
+#
+# Directs any **.consul requests to use consul's
+# DNS service
+##
+
+# List available consul-dns servers, preferring
+# host-local service if specified
+
+{{ $preferred := or (env "HOSTNAME") "" }}
+
+{{ range service "consul-dns" }}
+{{ if ne .Node $preferred }}
+server=/consul/{{.Address}}#{{.Port}}
+{{ end }}
+{{ end }}
+
+{{ range service "consul-dns" }}
+{{ if eq .Node $preferred }}
+server=/consul/{{.Address}}#{{.Port}}
+{{ end }}
+{{ end }}
