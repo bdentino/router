@@ -55,14 +55,6 @@ cat <<USAGE
 USAGE
 }
 
-touch /var/log/haproxy.log
-touch /var/log/dnsmasq.log
-touch /var/log/messages
-
-tail -f /var/log/haproxy.log &
-tail -f /var/log/dnsmasq.log &
-tail -f /var/log/messages &
-
 if [ "$(ls -A /usr/local/share/ca-certificates)" ]; then
   cat /usr/local/share/ca-certificates/* >> /etc/ssl/certs/ca-certificates.crt
 fi
@@ -74,6 +66,7 @@ fi
 export CONSUL_EXTRA_ARGS=$@
 
 rsyslogd
-/usr/sbin/haproxy -D -p /var/run/haproxy.pid -f /router/haproxy.cfg -sf $(cat /var/run/haproxy.pid)
+/usr/sbin/haproxy -D -p /var/run/haproxy.pid -f /router/haproxy.cfg -sf $(ps -ef | grep haproxy | grep -v true | awk '{ print $1 }' | tr '\n' ' ') || true
 /usr/sbin/dnsmasq -C /router/dnsmasq.cfg
-/usr/local/bin/consul-template -config /router/consul.cfg -log-level ${CONSUL_LOGLEVEL} -wait ${CONSUL_MINWAIT}:${CONSUL_MAXWAIT} -consul ${CONSUL_URL} ${CONSUL_TOKEN_ARG} ${CONSUL_EXTRA_ARGS}
+
+supervisord -c /supervisord.conf
